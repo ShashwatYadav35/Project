@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loop Financial — AP Automation Demo</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; }
+    .fade-in { animation: fadeIn 0.25s ease-in; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    .toast-in { animation: toastIn 0.3s ease-out; }
+    @keyframes toastIn { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+    .pulse { animation: pulseDot 2s infinite; }
+    @keyframes pulseDot { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+    ::-webkit-scrollbar { width:5px; height:5px; }
+    ::-webkit-scrollbar-track { background:#f1f5f9; }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+  </style>
+</head>
+<body class="bg-slate-50">
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useCallback, useMemo } = React;
+
+/* ── TEAM ── */
+const TEAM = {
+  FM:  { name:'Shashwat Yadav', role:'Finance Manager',    av:'SY', bg:'bg-indigo-600' },
+  HOF: { name:'Dave McKenzie',  role:'Head of Finance',    av:'DM', bg:'bg-blue-700'   },
+  HR:  { name:'Mandy Ho',       role:'HR Specialist',      av:'MH', bg:'bg-rose-500'   },
+  MKT: { name:'Sarah Sheikh',   role:'Marketing Lead',     av:'SS', bg:'bg-violet-600' },
+  OPS: { name:'Cato Pastoll',   role:'Operations Lead',    av:'CP', bg:'bg-teal-600'   },
+  FIN: { name:'Dave McKenzie',  role:'Finance Lead',       av:'DM', bg:'bg-blue-700'   },
+};
+
+/* ── GL CODES ── */
+const GL_CODES = [
+  { code:'6100', label:'Software & Subscriptions'  },
+  { code:'6200', label:'Infrastructure & Hosting'  },
+  { code:'6300', label:'Professional Services'     },
+  { code:'6400', label:'Marketing & Advertising'   },
+  { code:'6500', label:'Travel & Entertainment'    },
+  { code:'6600', label:'Payment Processing Fees'   },
+  { code:'6700', label:'HR & Recruitment'          },
+  { code:'6800', label:'Office & Facilities'       },
+  { code:'6900', label:'Audit & Compliance'        },
+];
+
+/* ── INVOICES ── */
+const INVOICES = [
+  { id:'INV-009', vendor:'Datadog',    amount:2400,  entity:'Loop Financial Inc.',  dept:'Engineering', approverKey:'FM',  gl:'6200', conf:'high',   terms:'Net 30', due:'2026-04-18', date:'2026-03-19', type:'standard',      po:'PO-2026-014', tags:['PO-Backed'],              memo:'Datadog — Infrastructure monitoring — April 2026',              desc:'Monthly infrastructure monitoring and APM platform.' },
+  { id:'INV-010', vendor:'KPMG',       amount:35000, entity:'Loop Financial Inc.',  dept:'Finance',      approverKey:'FIN', gl:'6900', conf:'high',   terms:'Net 30', due:'2026-04-22', date:'2026-03-22', type:'standard',      po:null,           tags:['Dual Approval'],          memo:'KPMG — Annual external audit engagement — FY2025',              desc:'Annual external audit engagement for FY2025 financial statements.' },
+  { id:'INV-011', vendor:'Stripe',     amount:4750,  entity:'Loop Payments Inc.',   dept:'Finance',      approverKey:'FM',  gl:'6600', conf:'low',    terms:'Net 14', due:'2026-04-08', date:'2026-03-25', type:'partner_recon', po:null,           tags:['Partner Recon'],          memo:'Stripe — Payment processing fees — March 2026',                 desc:'Transaction-volume-based processing fees for March 2026.',
+    recon:{ internalTotal:4750, externalTotal:4890, matched:312, unmatched:4, unmatchedVal:140 } },
+  { id:'INV-012', vendor:'Deloitte',   amount:19500, entity:'Loop Payments Inc.',   dept:'Finance',      approverKey:'FIN', gl:null,   conf:'medium', terms:'Net 30', due:'2026-04-25', date:'2026-03-26', type:'standard',      po:null,           tags:['Split Coding','Dual Approval'], memo:'Deloitte — Q1 tax advisory & compliance — Q1 2026',         desc:'Q1 tax advisory and regulatory compliance consulting.',
+    split:[{ line:'L1', gl:'6900', label:'Audit & Compliance',  amount:12000, dept:'Finance'     },
+           { line:'L2', gl:'6300', label:'Professional Services', amount:7500,  dept:'Operations'  }] },
+  { id:'INV-013', vendor:'Google Ads', amount:5000,  entity:'Loop Financial Inc.',  dept:'Marketing',   approverKey:'MKT', gl:'6400', conf:'high',   terms:'Net 30', due:'2026-04-20', date:'2026-03-20', type:'standard',      po:null,           tags:['Standard'],               memo:'Google Ads — Paid search campaigns — April 2026',               desc:'Paid search and display advertising campaigns for April 2026.' },
+  { id:'INV-014', vendor:'Air Canada', amount:3180,  entity:'Loop Financial Inc.',  dept:'Operations',  approverKey:'OPS', gl:'6500', conf:'high',   terms:'Net 15', due:'2026-04-10', date:'2026-03-26', type:'standard',      po:null,           tags:['Urgent'],                 memo:'Air Canada — Corporate travel (Toronto to NYC) — April 2026',   desc:'Corporate travel for Q2 planning sessions.' },
+  { id:'INV-015', vendor:'Slack',      amount:1800,  entity:'Loop Financial Inc.',  dept:'Operations',  approverKey:'OPS', gl:'6100', conf:'high',   terms:'Net 30', due:'2026-04-28', date:'2026-03-28', type:'standard',      po:'PO-2026-002',  tags:['PO-Backed'],              memo:'Slack — Business+ workspace plan — April 2026',                 desc:'Slack Business+ monthly workspace subscription.' },
+  { id:'INV-016', vendor:'Figma',      amount:2800,  entity:'Loop Financial Inc.',  dept:'Product',     approverKey:'FM',  gl:null,   conf:'low',    terms:'Net 30', due:'2026-04-30', date:'2026-03-30', type:'standard',      po:null,           tags:['FM Review'],              memo:'Figma — Design platform annual subscription — April 2026',       desc:'Annual Figma design platform subscription for the Product team.' },
+];
+
+/* ── STATUS META ── */
+const SM = {
+  'Received':            { pill:'bg-slate-100 text-slate-700',     dot:'bg-slate-400',    label:'Received'            },
+  'Awaiting FM Review':  { pill:'bg-amber-100 text-amber-800',     dot:'bg-amber-400',    label:'FM Review'           },
+  'Processing':          { pill:'bg-blue-100 text-blue-800',       dot:'bg-blue-500',     label:'Processing'          },
+  'Pending Approval':    { pill:'bg-violet-100 text-violet-800',   dot:'bg-violet-500',   label:'Pending Approval'    },
+  'Approved':            { pill:'bg-green-100 text-green-800',     dot:'bg-green-500',    label:'Approved'            },
+  'In QBO':              { pill:'bg-teal-100 text-teal-800',       dot:'bg-teal-500',     label:'In QBO'              },
+  'Scheduled':           { pill:'bg-indigo-100 text-indigo-800',   dot:'bg-indigo-500',   label:'Scheduled'           },
+  'Paid':                { pill:'bg-emerald-100 text-emerald-800', dot:'bg-emerald-500',  label:'Paid'                },
+  'Rejected':            { pill:'bg-red-100 text-red-800',         dot:'bg-red-500',      label:'Rejected'            },
+  'Returned':            { pill:'bg-orange-100 text-orange-800',   dot:'bg-orange-400',   label:'Returned'            },
+  'Recon In Progress':   { pill:'bg-sky-100 text-sky-800',         dot:'bg-sky-400',      label:'Recon In Progress'   },
+  'Reconciled & Posted': { pill:'bg-teal-100 text-teal-800',       dot:'bg-teal-500',     label:'Reconciled & Posted' },
+};
+
+const fmt  = n => '$' + Number(n).toLocaleString('en-CA', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const nowT = () => new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+/* ── SMALL UI COMPONENTS ── */
+const Av = ({ p, lg }) => (
+  <div className={`${lg ? 'w-9 h-9 text-sm' : 'w-7 h-7 text-xs'} ${p.bg} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}>{p.av}</div>
+);
+const Pill = ({ children, cls }) => (
+  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{children}</span>
+);
+const StatusPill = ({ status }) => {
+  const m = SM[status] || SM['Received'];
+  return <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${m.pill}`}><span className={`w-1.5 h-1.5 rounded-full ${m.dot}`}></span>{m.label}</span>;
+};
+const ConfPill = ({ c }) => {
+  const map = { high:'bg-green-100 text-green-800', medium:'bg-amber-100 text-amber-800', low:'bg-red-100 text-red-800' };
+  return <Pill cls={map[c]}>{c.charAt(0).toUpperCase()+c.slice(1)} Confidence</Pill>;
+};
+
+/* ── ICONS ── */
+const I = ({ n }) => ({
+  check:    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>,
+  x:        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>,
+  dl:       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>,
+  send:     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>,
+  ret:      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>,
+  shield:   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
+  refresh:  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>,
+  dollar:   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+  chart:    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>,
+  list:     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>,
+  eye:      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>,
+  warning:  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>,
+  cal:      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
+  lock:     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
+  slack:    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zm10.122 2.521a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zm-1.268 0a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zm-2.523 10.122a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zm0-1.268a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/></svg>,
+}[n] || null);
+
+/* ── CSV DOWNLOAD ── */
+function dlCSV(name, rows) {
+  const csv = rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = name; a.click();
+}
+
+/* ═══════════════════════════════════════════════════════════ MAIN APP */
+function App() {
+  const [tab,   setTab]   = useState('workflow');
+  const [selId, setSelId] = useState(INVOICES[0].id);
+  const [toasts,setToasts]= useState([]);
+  const [panel, setPanel] = useState(null);   // 'gl'|'approve'|'return'|'reject'
+  const [glPick, setGlPick]     = useState('');
+  const [apprNote, setApprNote] = useState('');
+  const [retNote,  setRetNote]  = useState('');
+  const [rejNote,  setRejNote]  = useState('');
+  const [payRun,   setPayRun]   = useState({ reviewing:false, released:false });
+
+  const [states, setStates] = useState(() => INVOICES.reduce((acc, inv) => {
+    acc[inv.id] = { status:'Received', gl:inv.gl, trail:[], a1:null, a2:null, reconDone:false };
+    return acc;
+  }, {}));
+
+  const inv   = INVOICES.find(i => i.id === selId);
+  const state = states[selId];
+
+  /* helpers */
+  const toast = useCallback((msg, type='ok') => {
+    const id = Date.now();
+    setToasts(p => [...p, { id, msg, type }]);
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
+  }, []);
+
+  const log = useCallback((id, action, detail) => {
+    setStates(p => ({ ...p, [id]: { ...p[id], trail: [...p[id].trail, { action, detail, t: nowT() }] } }));
+  }, []);
+
+  const upd = useCallback((id, patch) => setStates(p => ({ ...p, [id]: { ...p[id], ...patch } })), []);
+
+  /* ── WORKFLOW ACTIONS ── */
+  const doProcess = useCallback(() => {
+    if (inv.conf === 'high') {
+      upd(inv.id, { status:'Processing', gl: inv.gl });
+      log(inv.id, 'Auto-Process', `GL ${inv.gl} auto-assigned — high confidence`);
+      toast('✓ Processed — GL auto-assigned (high confidence)');
+    } else {
+      upd(inv.id, { status:'Awaiting FM Review' });
+      log(inv.id, 'Flagged for FM Review', `${inv.conf} confidence — manual GL assignment required`);
+      toast('⚠ Flagged for FM Review — GL assignment required', 'warn');
+    }
+    setPanel(null);
+  }, [inv, log, upd, toast]);
+
+  const doAssignGL = useCallback(() => {
+    const code = glPick || '6300';
+    upd(inv.id, { status:'Processing', gl: code });
+    log(inv.id, 'FM — GL Assigned', `GL ${code} manually assigned by ${TEAM.FM.name}`);
+    toast(`✓ GL ${code} assigned by Finance Manager`);
+    setGlPick(''); setPanel(null);
+  }, [inv, glPick, log, upd, toast]);
+
+  const doSendApproval = useCallback(() => {
+    upd(inv.id, { status:'Pending Approval' });
+    log(inv.id, 'Sent to #ap-approvals', `Approval request posted to Slack by ${TEAM.FM.name}`);
+    toast('📨 Sent to #ap-approvals');
+    setPanel(null);
+  }, [inv, log, upd, toast]);
+
+  const doApprove = useCallback(() => {
+    const dual = inv.amount >= 10000;
+    if (dual && !state.a1) {
+      const tl = TEAM[inv.approverKey]?.name || 'Team Lead';
+      upd(inv.id, { a1: tl });
+      log(inv.id, 'Team Lead Approved', `${tl} approved${apprNote ? ': ' + apprNote : ''} — awaiting ${TEAM.HOF.name}`);
+      toast(`✓ First approval by ${tl} — awaiting ${TEAM.HOF.name}`);
+    } else {
+      const finalApprover = dual ? TEAM.HOF.name : (TEAM[inv.approverKey]?.name || 'Team Lead');
+      upd(inv.id, { status:'Approved', a2: dual ? TEAM.HOF.name : null });
+      log(inv.id, 'Fully Approved', `${finalApprover} gave final approval${apprNote ? ': ' + apprNote : ''}`);
+      toast('✅ Invoice fully approved!');
+    }
+    setApprNote(''); setPanel(null);
+  }, [inv, state, apprNote, log, upd, toast]);
+
+  const doReject = useCallback(() => {
+    upd(inv.id, { status:'Rejected' });
+    log(inv.id, 'Rejected', `Reason: ${rejNote || 'No reason provided'}`);
+    toast('✗ Invoice rejected', 'err');
+    setRejNote(''); setPanel(null);
+  }, [inv, rejNote, log, upd, toast]);
+
+  const doReturn = useCallback(() => {
+    upd(inv.id, { status:'Processing', a1:null });
+    log(inv.id, 'Returned to FM', `Reason: ${retNote || 'No reason provided'}`);
+    toast('↩ Returned to Finance Manager');
+    setRetNote(''); setPanel(null);
+  }, [inv, retNote, log, upd, toast]);
+
+  const doEnterQBO = useCallback(() => {
+    upd(inv.id, { status:'In QBO' });
+    log(inv.id, 'Entered in QBO', `Bill created in QuickBooks Online by ${TEAM.FM.name}`);
+    toast('📘 Entered in QuickBooks Online');
+  }, [inv, log, upd, toast]);
+
+  const doSchedule = useCallback(() => {
+    upd(inv.id, { status:'Scheduled' });
+    log(inv.id, 'Scheduled for Payment', 'Added to Tuesday payment run');
+    toast('📅 Scheduled for Tuesday payment run');
+  }, [inv, log, upd, toast]);
+
+  const doPaid = useCallback((id) => {
+    const target = id || inv.id;
+    upd(target, { status:'Paid' });
+    log(target, 'Payment Released', `Released by ${TEAM.HOF.name} — confirmation logged`);
+    toast('💸 Payment released and confirmed');
+  }, [inv, log, upd, toast]);
+
+  const doStartRecon = useCallback((id) => {
+    const target = id || inv.id;
+    upd(target, { status:'Recon In Progress' });
+    log(target, 'Reconciliation Started', `Internal DB vs. Stripe report comparison initiated by ${TEAM.FM.name}`);
+    toast('🔍 Reconciliation started');
+  }, [inv, log, upd, toast]);
+
+  const doClearRecon = useCallback((id) => {
+    const target = id || inv.id;
+    upd(target, { status:'Reconciled & Posted', reconDone:true, gl:'6600' });
+    log(target, 'Reconciled & Posted to QBO', `All transactions matched/cleared. Posted directly to QBO — GL 6600 by ${TEAM.FM.name}`);
+    toast('✅ Reconciled and posted directly to QBO');
+  }, [inv, log, upd, toast]);
+
+  /* ── EXPORTS ── */
+  const exportLog = useCallback(() => {
+    const hdr = ['INV Ref #','Vendor','Entity','Invoice Date','Due Date','Amount','Currency','GL Code','GL Account','Department','Memo','Status','Approver','Tags'];
+    const rows = INVOICES.map(i => {
+      const s = states[i.id]; const gl = GL_CODES.find(g => g.code === s.gl);
+      const appr = i.amount >= 10000 ? `${TEAM[i.approverKey]?.name||'TL'} + ${TEAM.HOF.name}` : (TEAM[i.approverKey]?.name||'TL');
+      return [i.id, i.vendor, i.entity, i.date, i.due, i.amount, 'CAD', s.gl||'', gl?.label||'', i.dept, i.memo, s.status, appr, i.tags.join('; ')];
+    });
+    dlCSV(`Loop_AP_Invoice_Log_${new Date().toISOString().slice(0,10)}.csv`, [hdr, ...rows]);
+    toast('📥 Invoice Log CSV downloaded');
+  }, [states, toast]);
+
+  const exportQBO = useCallback(() => {
+    const eligible = INVOICES.filter(i => ['Approved','In QBO','Scheduled','Paid','Reconciled & Posted'].includes(states[i.id].status));
+    if (!eligible.length) { toast('No approved invoices to export yet', 'warn'); return; }
+    const hdr = ['RefNo','Vendor','InvoiceDate','DueDate','Terms','Memo','GLAccount','GLCode','Amount','Currency','Department','Entity','ApprovedBy','Status'];
+    const rows = eligible.flatMap(i => {
+      const s = states[i.id];
+      if (i.split) return i.split.map(ln => {
+        const gl = GL_CODES.find(g => g.code === ln.gl);
+        return [`${i.id}-${ln.line}`, i.vendor, i.date, i.due, i.terms, i.memo, gl?.label||'', ln.gl, ln.amount, 'CAD', ln.dept, i.entity, TEAM.HOF.name, s.status];
+      });
+      const gl = GL_CODES.find(g => g.code === s.gl);
+      const appr = i.amount >= 10000 ? `${TEAM[i.approverKey]?.name||'TL'} + ${TEAM.HOF.name}` : TEAM[i.approverKey]?.name||'TL';
+      return [[i.id, i.vendor, i.date, i.due, i.terms, i.memo, gl?.label||'', s.gl||'', i.amount, 'CAD', i.dept, i.entity, appr, s.status]];
+    });
+    dlCSV(`Loop_AP_QBO_Batch_${new Date().toISOString().slice(0,10)}.csv`, [hdr, ...rows]);
+    toast('📥 QBO batch CSV downloaded');
+  }, [states, toast]);
+
+  const exportPaySheet = useCallback(() => {
+    const eligible = INVOICES.filter(i => ['Approved','In QBO','Scheduled'].includes(states[i.id].status));
+    if (!eligible.length) { toast('No invoices ready for the payment sheet yet', 'warn'); return; }
+    const hdr = ['INV Ref #','Vendor','Entity','Amount','Currency','Due Date','Payment Method','Status','Memo'];
+    const rows = eligible.map(i => [i.id, i.vendor, i.entity, i.amount, 'CAD', i.due, 'EFT', states[i.id].status, i.memo]);
+    dlCSV(`Loop_AP_Payment_Sheet_${new Date().toISOString().slice(0,10)}.csv`, [hdr, ...rows]);
+    toast('📥 Payment sheet downloaded');
+  }, [states, toast]);
+
+  /* ── STATS ── */
+  const stats = useMemo(() => {
+    const total   = INVOICES.reduce((a,i) => a + i.amount, 0);
+    const approved= INVOICES.filter(i => ['Approved','In QBO','Scheduled','Paid','Reconciled & Posted'].includes(states[i.id].status)).reduce((a,i)=>a+i.amount,0);
+    const paid    = INVOICES.filter(i => ['Paid','Reconciled & Posted'].includes(states[i.id].status)).reduce((a,i)=>a+i.amount,0);
+    const pending = INVOICES.filter(i => states[i.id].status === 'Pending Approval').length;
+    const fmReview= INVOICES.filter(i => states[i.id].status === 'Awaiting FM Review').length;
+    return { total, approved, paid, pending, fmReview };
+  }, [states]);
+
+  /* ── PHASE CALCULATION ── */
+  const phase = (status) => {
+    const map = { 'Received':1,'Awaiting FM Review':2,'Processing':3,'Pending Approval':4,'Approved':4,'In QBO':5,'Scheduled':7,'Paid':7,'Recon In Progress':6,'Reconciled & Posted':6 };
+    return map[status] || 0;
+  };
+
+  /* ── CONTROLS DATA ── */
+  const controls = [
+    { type:'Preventative', bg:'bg-blue-700', items:[
+      { label:'Single Intake Channel',  desc:'All invoices must arrive at ap@loopfinancial.com. No invoice is processed if received through other channels without being forwarded first.' },
+      { label:'Completeness Gate',      desc:'Missing required fields block all processing. The invoice is returned to the vendor before a log entry is created.' },
+      { label:'Duplicate Detection',    desc:'FM checks for the same vendor and similar amount within a 30-day window before logging a new entry.' },
+      { label:'PO Matching',            desc:'Where a PO exists, the invoiced amount must match within 5%. Variances above 5% are flagged before approval.' },
+      { label:'Segregation of Duties',  desc:'FM codes invoices; a separate Team Lead (and Head of Finance for amounts of $10K and above) must approve. FM cannot self-approve.' },
+    ]},
+    { type:'Detective', bg:'bg-violet-700', items:[
+      { label:'GL Confidence Scoring',       desc:'Low and medium confidence GL codes are flagged in the Invoice Log and require FM review before the invoice can advance.' },
+      { label:'Period Matching',             desc:'The invoice billing period must match the period in which services were delivered. Retroactive invoices are flagged.' },
+      { label:'Partner Reconciliation',      desc:'Payment partner invoices are reconciled against internal transaction database records before being posted to QBO.' },
+      { label:'Post-Payment Reconciliation', desc:'FM matches payment confirmation numbers against the Invoice Log and bank records after every payment run.' },
+    ]},
+    { type:'Approval Controls', bg:'bg-amber-600', items:[
+      { label:'Dollar Threshold Matrix', desc:'Under $10K: single Team Lead approval. $10K and above: Team Lead approval followed by Dave McKenzie (Head of Finance).' },
+      { label:'3-Business-Day SLA',     desc:'Team Leads must respond within 3 business days. FM escalates to Dave McKenzie at the 72-hour mark if no response is received.' },
+      { label:'Dual-Approval Logging',  desc:'Both approval timestamps and approver names are recorded in the Invoice Log and per-invoice audit trail.' },
+      { label:'PO Pre-Authorisation',   desc:'Standing POs eliminate per-invoice Team Lead approval for covered vendors — one approval covers the full year of spend.' },
+    ]},
+    { type:'Completeness', bg:'bg-teal-700', items:[
+      { label:'Invoice Log',          desc:'Every invoice has a log entry from receipt to payment. All status changes are timestamped with the actor recorded.' },
+      { label:'File Naming Standard', desc:'Entity/YYYY-MM/Vendor - Invoice - INV# - MMM YYYY.pdf ensures every invoice is traceable and correctly filed.' },
+      { label:'QBO as Payment Gate',  desc:'No invoice can be paid unless it is entered in QBO, confirming it has been approved internally and GL-coded correctly.' },
+      { label:'Full Audit Trail',     desc:'Every action — received, processed, sent for approval, approved, entered in QBO, and paid — is logged with time and actor.' },
+    ]},
+  ];
+
+  /* ═══════════════════════════════════════════════════ RENDER */
+  return (
+    <div className="min-h-screen bg-slate-50">
+
+      {/* top banner */}
+      <div className="bg-indigo-900 text-indigo-200 text-xs text-center py-2 font-medium">
+        🔗 AP Automation Demo — Loop Financial Inc. &nbsp;|&nbsp; Open in Chrome or Firefox &nbsp;|&nbsp; Requires internet connection to load React and Tailwind
+      </div>
+
+      {/* header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-screen-xl mx-auto px-5 py-3 flex items-center gap-5">
+          {/* logo */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-9 h-9 bg-indigo-700 rounded-lg flex items-center justify-center text-white font-bold text-sm">LF</div>
+            <div>
+              <div className="font-bold text-slate-900 text-sm leading-none">Loop Financial</div>
+              <div className="text-xs text-slate-400 leading-none mt-0.5">AP Automation v2.1</div>
+            </div>
+          </div>
+          {/* stats strip */}
+          <div className="hidden md:flex items-center gap-5 text-xs ml-4">
+            {[
+              { label:'Pipeline',    val:fmt(stats.total),    color:'text-slate-900' },
+              { label:'Approved',    val:fmt(stats.approved), color:'text-green-700' },
+              { label:'Paid',        val:fmt(stats.paid),     color:'text-emerald-700' },
+              { label:'Pending',     val:stats.pending,       color:'text-violet-700' },
+              { label:'FM Review',   val:stats.fmReview,      color:'text-amber-700' },
+            ].map(s => (
+              <div key={s.label} className="text-center">
+                <div className={`font-bold ${s.color}`}>{s.val}</div>
+                <div className="text-slate-400">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          {/* export buttons */}
+          <div className="ml-auto flex gap-2 flex-shrink-0">
+            <button onClick={exportLog} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition"><I n="dl"/> Invoice Log</button>
+            <button onClick={exportQBO} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition"><I n="dl"/> QBO Export</button>
+            <button onClick={exportPaySheet} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition"><I n="dollar"/> Payment Sheet</button>
+          </div>
+        </div>
+        {/* tab bar */}
+        <div className="max-w-screen-xl mx-auto px-5 border-t border-slate-100">
+          <nav className="flex gap-0.5 py-1.5 overflow-x-auto">
+            {[
+              { id:'workflow',  label:'Workflow',          icon:'eye'     },
+              { id:'approvals', label:'#ap-approvals',     icon:'slack'   },
+              { id:'recon',     label:'Partner Recon',     icon:'refresh' },
+              { id:'payment',   label:'Payment Run',       icon:'dollar'  },
+              { id:'controls',  label:'Internal Controls', icon:'shield'  },
+              { id:'dashboard', label:'FM Dashboard',      icon:'chart'   },
+              { id:'logs',      label:'Audit Logs',        icon:'list'    },
+            ].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition whitespace-nowrap ${tab===t.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <I n={t.icon}/> {t.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      {/* toasts */}
+      <div className="fixed bottom-5 right-5 z-50 space-y-2">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast-in flex items-center gap-2 px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium text-white ${t.type==='err'?'bg-red-600':t.type==='warn'?'bg-amber-600':'bg-emerald-600'}`}>{t.msg}</div>
+        ))}
+      </div>
+
+      <main className="max-w-screen-xl mx-auto px-5 py-5">
+
+      {/* ════════════════ WORKFLOW TAB */}
+      {tab === 'workflow' && (
+        <div className="flex gap-5">
+          {/* sidebar */}
+          <aside className="w-64 flex-shrink-0 space-y-2">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold text-sm text-slate-800">Invoices</span>
+              <span className="text-xs text-slate-400">{INVOICES.length} total</span>
+            </div>
+            {INVOICES.map(i => {
+              const s = states[i.id]; const m = SM[s.status] || SM['Received'];
+              return (
+                <div key={i.id} onClick={() => { setSelId(i.id); setPanel(null); }}
+                  className={`p-3 rounded-xl border-2 cursor-pointer transition ${selId===i.id ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-bold text-xs text-slate-400">{i.id}</span>
+                    <span className={`flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full ${m.pill}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${m.dot}`}></span>{m.label}
+                    </span>
+                  </div>
+                  <div className="font-semibold text-sm text-slate-800">{i.vendor}</div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span className="text-xs text-slate-400">{i.entity.replace('Loop ','')}</span>
+                    <span className="text-sm font-bold text-slate-900">{fmt(i.amount)}</span>
+                  </div>
+                  <div className="flex gap-1 mt-1.5 flex-wrap">
+                    {i.tags.map(t => <span key={t} className="text-xs px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-medium">{t}</span>)}
+                  </div>
+                </div>
+              );
+            })}
+          </aside>
+
+          {/* main */}
+          <div className="flex-1 space-y-4">
+            {/* phase bar */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Process Phase</span>
+                {inv.type === 'partner_recon' && <Pill cls="bg-sky-100 text-sky-800">Payment Partner — Reconciliation Route</Pill>}
+                {inv.po && <Pill cls="bg-green-100 text-green-800">PO-Backed — TL Approval Waived</Pill>}
+              </div>
+              {(() => {
+                const visPhases = inv.type === 'partner_recon'
+                  ? [{ n:1,l:'Intake' },{ n:6,l:'Reconcile' },{ n:7,l:'Payment' }]
+                  : [{ n:1,l:'Intake' },{ n:2,l:'GL Coding' },{ n:3,l:'Docs' },{ n:4,l:'Approval' },{ n:5,l:'QBO Entry' },{ n:7,l:'Payment' }];
+                const cp = phase(state.status);
+                return (
+                  <div className="flex items-center gap-1">
+                    {visPhases.map((p, idx) => {
+                      const active = cp === p.n;
+                      const done   = cp > p.n || (p.n===7 && cp===7 && state.status==='Paid');
+                      return (
+                        <React.Fragment key={p.n}>
+                          <div className="flex flex-col items-center gap-1 flex-1">
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition
+                              ${active ? 'bg-indigo-600 text-white ring-4 ring-indigo-100' : done ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                              {done ? '✓' : p.n}
+                            </div>
+                            <span className={`text-xs text-center leading-tight ${active?'font-bold text-slate-800':done?'text-emerald-700':'text-slate-400'}`}>{p.l}</span>
+                          </div>
+                          {idx < visPhases.length-1 && <div className={`h-0.5 w-5 flex-shrink-0 mb-4 ${done?'bg-emerald-400':'bg-slate-200'}`}></div>}
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* invoice detail */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h2 className="text-xl font-bold text-slate-900">{inv.vendor}</h2>
+                    <StatusPill status={state.status}/>
+                    {state.a1 && !state.a2 && inv.amount >= 10000 && <Pill cls="bg-amber-100 text-amber-800">Awaiting {TEAM.HOF.name}</Pill>}
+                  </div>
+                  <div className="text-xs text-slate-500">{inv.id} · {inv.entity} · Invoice date {inv.date} · Due {inv.due}</div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-2xl font-bold text-slate-900">{fmt(inv.amount)}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{inv.terms}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 py-3 border-t border-b border-slate-100">
+                <div>
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Memo</div>
+                  <div className="text-sm text-slate-700">{inv.memo}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">GL Account</div>
+                  <div className="text-sm font-medium text-slate-700">
+                    {state.gl ? `${state.gl} — ${GL_CODES.find(g=>g.code===state.gl)?.label||''}` : <span className="text-amber-600">Not yet assigned</span>}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Department</div>
+                  <div className="text-sm text-slate-700">{inv.dept}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Confidence</div>
+                  <ConfPill c={inv.conf}/>
+                </div>
+                {inv.po && (
+                  <div>
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">PO Reference</div>
+                    <div className="text-sm font-medium text-green-700">{inv.po} — Team Lead approval waived</div>
+                  </div>
+                )}
+                {inv.split && (
+                  <div className="col-span-2">
+                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Split Coding</div>
+                    <div className="space-y-1.5">
+                      {inv.split.map(ln => (
+                        <div key={ln.line} className="flex items-center gap-3 text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                          <span className="font-mono text-xs bg-white border border-slate-200 rounded px-1.5 py-0.5 font-bold">{inv.id}-{ln.line}</span>
+                          <span className="text-slate-600 flex-1">{ln.gl} — {ln.label} · {ln.dept}</span>
+                          <span className="font-bold text-slate-900">{fmt(ln.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* dual approval panel */}
+              {inv.amount >= 10000 && (
+                <div>
+                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Dual Approval Required (≥$10K)</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { person: TEAM[inv.approverKey]||TEAM.FM, done: !!state.a1, label: state.a1 ? '✓ First approval recorded' : 'Awaiting first approval' },
+                      { person: TEAM.HOF, done: !!state.a2, label: state.a2 ? '✓ Final approval given' : 'Awaiting second approval' },
+                    ].map((row,i) => (
+                      <div key={i} className={`flex items-start gap-2 p-3 rounded-xl border ${row.done ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-slate-50'}`}>
+                        <Av p={row.person}/>
+                        <div>
+                          <div className="text-xs font-bold text-slate-800">{row.person.name}</div>
+                          <div className="text-xs text-slate-500">{row.person.role}</div>
+                          <div className={`text-xs font-medium mt-1 ${row.done ? 'text-green-700' : 'text-slate-400'}`}>{row.label}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* action buttons */}
+              <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  {state.status === 'Received' && inv.type !== 'partner_recon' &&
+                    <button onClick={doProcess} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition"><I n="eye"/> Process Invoice</button>}
+                  {state.status === 'Received' && inv.type === 'partner_recon' &&
+                    <button onClick={() => doStartRecon(inv.id)} className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium rounded-lg transition"><I n="refresh"/> Start Reconciliation</button>}
+                  {state.status === 'Awaiting FM Review' &&
+                    <button onClick={() => setPanel('gl')} className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition"><I n="eye"/> Assign GL Code</button>}
+                  {state.status === 'Processing' &&
+                    <button onClick={doSendApproval} className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-lg transition"><I n="send"/> Send for Approval</button>}
+                  {state.status === 'Pending Approval' && <>
+                    <button onClick={() => setPanel('approve')} className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition">
+                      <I n="check"/> {inv.amount >= 10000 && !state.a1 ? `${TEAM[inv.approverKey]?.name||'Team Lead'} Approve` : inv.amount >= 10000 ? `${TEAM.HOF.name} Final Approval` : 'Approve'}
+                    </button>
+                    <button onClick={() => setPanel('return')} className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-lg transition"><I n="ret"/> Return to FM</button>
+                    <button onClick={() => setPanel('reject')} className="flex items-center gap-1.5 px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition"><I n="x"/> Reject</button>
+                  </>}
+                  {state.status === 'Approved' &&
+                    <button onClick={doEnterQBO} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition"><I n="check"/> Enter in QBO</button>}
+                  {state.status === 'In QBO' &&
+                    <button onClick={doSchedule} className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition"><I n="cal"/> Schedule for Tuesday Run</button>}
+                  {state.status === 'Scheduled' &&
+                    <button onClick={() => doPaid(inv.id)} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition"><I n="dollar"/> Mark Paid — {TEAM.HOF.name}</button>}
+                  {state.status === 'Recon In Progress' &&
+                    <button onClick={() => doClearRecon(inv.id)} className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition"><I n="check"/> Clear & Post to QBO</button>}
+                </div>
+
+                {/* sub-panels */}
+                {panel === 'gl' && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 fade-in">
+                    <div className="text-sm font-semibold text-amber-800 mb-2">Assign GL Code — Finance Manager</div>
+                    <select value={glPick} onChange={e => setGlPick(e.target.value)} className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm mb-3 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">
+                      <option value="">Select GL account...</option>
+                      {GL_CODES.map(g => <option key={g.code} value={g.code}>{g.code} — {g.label}</option>)}
+                    </select>
+                    <div className="flex gap-2">
+                      <button onClick={doAssignGL} className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700">Confirm Assignment</button>
+                      <button onClick={() => setPanel(null)} className="px-4 py-2 border border-amber-300 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-100">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {panel === 'approve' && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 fade-in">
+                    <div className="text-sm font-semibold text-green-800 mb-2">
+                      {inv.amount >= 10000 && !state.a1 ? `Team Lead approval — ${TEAM[inv.approverKey]?.name||'Team Lead'}` : `Final approval — ${inv.amount >= 10000 ? TEAM.HOF.name : TEAM[inv.approverKey]?.name||'Team Lead'}`}
+                    </div>
+                    <textarea value={apprNote} onChange={e => setApprNote(e.target.value)} placeholder="Optional approval note..." rows={2}
+                      className="w-full border border-green-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-green-400 bg-white"/>
+                    <div className="flex gap-2">
+                      <button onClick={doApprove} className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700">Confirm Approval</button>
+                      <button onClick={() => setPanel(null)} className="px-4 py-2 border border-green-300 text-green-700 text-sm font-medium rounded-lg hover:bg-green-100">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {panel === 'return' && (
+                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 fade-in">
+                    <div className="text-sm font-semibold text-orange-800 mb-2">Return to Finance Manager</div>
+                    <textarea value={retNote} onChange={e => setRetNote(e.target.value)} placeholder="Reason for return (e.g. incorrect GL code, missing documentation)..." rows={2}
+                      className="w-full border border-orange-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"/>
+                    <div className="flex gap-2">
+                      <button onClick={doReturn} className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700">Return Invoice</button>
+                      <button onClick={() => setPanel(null)} className="px-4 py-2 border border-orange-300 text-orange-700 text-sm font-medium rounded-lg hover:bg-orange-100">Cancel</button>
+                    </div>
+                  </div>
+                )}
+                {panel === 'reject' && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-4 fade-in">
+                    <div className="text-sm font-semibold text-red-800 mb-2">Reject Invoice</div>
+                    <textarea value={rejNote} onChange={e => setRejNote(e.target.value)} placeholder="Reason for rejection (required)..." rows={2}
+                      className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"/>
+                    <div className="flex gap-2">
+                      <button onClick={doReject} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">Confirm Rejection</button>
+                      <button onClick={() => setPanel(null)} className="px-4 py-2 border border-red-300 text-red-700 text-sm font-medium rounded-lg hover:bg-red-100">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* audit trail */}
+            {state.trail.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                <h3 className="font-semibold text-sm text-slate-700 mb-3">Audit Trail — {inv.id}</h3>
+                <div className="space-y-2">
+                  {[...state.trail].reverse().map((e,i) => (
+                    <div key={i} className="flex items-start gap-3 text-xs">
+                      <span className="font-mono text-slate-400 w-20 flex-shrink-0 pt-0.5">{e.t}</span>
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 mt-1 flex-shrink-0"></span>
+                      <span className="font-semibold text-slate-800">{e.action}</span>
+                      <span className="text-slate-500">— {e.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ #AP-APPROVALS TAB */}
+      {tab === 'approvals' && (
+        <div className="max-w-2xl mx-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-[#3F0E40] px-5 py-4 flex items-center gap-3">
+              <I n="slack"/>
+              <div className="text-white font-bold text-sm">#ap-approvals</div>
+              <div className="text-purple-300 text-xs ml-1">Loop Financial · Internal AP Approval Channel</div>
+              <div className="ml-auto flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-400 pulse"></div><span className="text-xs text-purple-200">5 members</span></div>
+            </div>
+            <div className="bg-yellow-50 border-b border-yellow-200 px-5 py-2.5 flex items-start gap-2">
+              <span className="text-yellow-600 text-xs mt-0.5">📌</span>
+              <div className="text-xs text-yellow-800"><strong>Pinned — SLA:</strong> Team Leads respond within <strong>3 business days</strong>. Invoices of $10K and above also require approval from <strong>Dave McKenzie (Head of Finance)</strong> after the Team Lead sign-off. Reply: <strong>APPROVED</strong> / <strong>RETURNED</strong> / <strong>REJECTED</strong> with a reason.</div>
+            </div>
+            <div className="p-5 space-y-6">
+              <div className="flex items-start gap-3">
+                <Av p={TEAM.FM}/>
+                <div>
+                  <div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold">{TEAM.FM.name}</span><Pill cls="bg-indigo-100 text-indigo-700">Finance Manager</Pill><span className="text-xs text-slate-400">9:02 AM</span></div>
+                  <p className="text-sm text-slate-700">Good morning team. Starting the April AP review. Will be posting invoices for approval throughout the day. Please respond within your SLA window. Thank you.</p>
+                </div>
+              </div>
+              {INVOICES.filter(i => !['Received','Awaiting FM Review','Processing'].includes(states[i.id].status) && i.type !== 'partner_recon').map(i => {
+                const s = states[i.id]; const gl = GL_CODES.find(g => g.code === s.gl); const approver = TEAM[i.approverKey]||TEAM.FM;
+                return (
+                  <div key={i.id} className="space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Av p={TEAM.FM}/>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold">{TEAM.FM.name}</span><Pill cls="bg-indigo-100 text-indigo-700">Finance Manager</Pill></div>
+                        <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 text-sm space-y-2">
+                          <div className="font-bold text-slate-900">📋 Approval Request — {i.id}</div>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                            <div><span className="text-slate-500">Vendor: </span><strong>{i.vendor}</strong></div>
+                            <div><span className="text-slate-500">Amount: </span><strong>{fmt(i.amount)}</strong></div>
+                            <div><span className="text-slate-500">Entity: </span>{i.entity}</div>
+                            <div><span className="text-slate-500">Due: </span>{i.due}</div>
+                            <div><span className="text-slate-500">GL: </span>{s.gl||'—'}{gl ? ` — ${gl.label}` : ''}</div>
+                            <div><span className="text-slate-500">Dept: </span>{i.dept}</div>
+                          </div>
+                          <div className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-1.5"><span className="text-slate-500">Memo: </span>{i.memo}</div>
+                          {i.amount >= 10000 && <div className="text-xs text-amber-700 font-medium">⚠ Amount is $10K or above — dual approval required: {approver.name} then Dave McKenzie (HoF)</div>}
+                          {i.po && <div className="text-xs text-green-700 font-medium">✓ PO-backed ({i.po}) — Team Lead approval has been waived</div>}
+                        </div>
+                      </div>
+                    </div>
+                    {['Approved','In QBO','Scheduled','Paid'].includes(s.status) && (
+                      <div className="flex items-start gap-3 ml-10">
+                        <Av p={approver}/>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold">{approver.name}</span><Pill cls="bg-green-100 text-green-800">✓ Approved</Pill></div>
+                          <p className="text-sm text-slate-700">APPROVED — service confirmed, GL code verified.</p>
+                          {i.amount >= 10000 && (
+                            <div className="mt-3 flex items-start gap-3">
+                              <Av p={TEAM.HOF}/>
+                              <div>
+                                <div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold">{TEAM.HOF.name}</span><Pill cls="bg-blue-100 text-blue-800">Head of Finance</Pill><Pill cls="bg-green-100 text-green-800">✓ Approved</Pill></div>
+                                <p className="text-sm text-slate-700">APPROVED — confirmed on my end. Budget is covered.</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {s.status === 'Rejected' && (
+                      <div className="flex items-start gap-3 ml-10"><Av p={approver}/><div><div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold">{approver.name}</span><Pill cls="bg-red-100 text-red-800">✗ Rejected</Pill></div><p className="text-sm text-slate-700">REJECTED — please contact Finance Manager for details.</p></div></div>
+                    )}
+                    {s.status === 'Returned' && (
+                      <div className="flex items-start gap-3 ml-10"><Av p={approver}/><div><div className="flex items-center gap-2 mb-1"><span className="text-sm font-bold">{approver.name}</span><Pill cls="bg-orange-100 text-orange-800">↩ Returned</Pill></div><p className="text-sm text-slate-700">RETURNED — please review the GL code and resubmit.</p></div></div>
+                    )}
+                  </div>
+                );
+              })}
+              {INVOICES.filter(i => !['Received','Awaiting FM Review','Processing'].includes(states[i.id].status) && i.type !== 'partner_recon').length === 0 && (
+                <div className="text-center py-8 text-slate-400 text-sm">No invoices sent for approval yet. Process invoices in the Workflow tab to see messages here.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ PARTNER RECON TAB */}
+      {tab === 'recon' && (
+        <div className="max-w-3xl mx-auto space-y-5">
+          <div className="bg-sky-900 rounded-2xl p-5 text-white">
+            <div className="text-xs font-medium text-sky-300 uppercase tracking-wide mb-1">Phase 6 — Payment Partner Invoice Reconciliation</div>
+            <div className="text-lg font-bold mb-1">Stripe — March 2026 Processing Fees</div>
+            <div className="text-sm text-sky-200 mb-3">INV-011 · Loop Payments Inc. · {fmt(4750)} · Due 2026-04-08</div>
+            <div className="text-xs text-sky-300">Stripe bills Loop Payments Inc. based on the volume of transactions processed through the platform. Shashwat Yadav (Finance Manager) must reconcile the partner invoice against Loop's internal transaction database before posting directly to QuickBooks Online. This process bypasses the standard Team Lead approval flow.</div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            {[{ label:'Internal DB Total', val:fmt(4750), sub:'312 transactions · March 2026', pill:'bg-teal-50 border-teal-200', color:'text-teal-700' },
+              { label:'Stripe Report Total', val:fmt(4890), sub:'316 transactions reported', pill:'bg-sky-50 border-sky-200', color:'text-sky-700' },
+              { label:'Discrepancy', val:fmt(140), sub:'4 unmatched transactions', pill:'bg-red-50 border-red-200', color:'text-red-700' },
+            ].map(c => (
+              <div key={c.label} className={`rounded-xl border p-4 ${c.pill}`}>
+                <div className="text-xs font-medium text-slate-500 mb-1">{c.label}</div>
+                <div className={`text-xl font-bold ${c.color}`}>{c.val}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{c.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-semibold text-slate-800">Transaction Matching — Rule Engine</h3>
+              <div className="flex gap-2 text-xs">
+                <Pill cls="bg-green-100 text-green-800">✓ 312 Matched</Pill>
+                <Pill cls="bg-red-100 text-red-800">✗ 4 Unmatched</Pill>
+              </div>
+            </div>
+            <div className="p-5">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Primary Matching Fields</div>
+              <div className="flex gap-2 flex-wrap mb-5">
+                {['Transaction Date','Transaction ID','Amount','Merchant','Fee Rate'].map(r => (
+                  <div key={r} className="bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 text-xs font-medium text-indigo-800">{r}</div>
+                ))}
+              </div>
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Unmatched Transactions — Exceptions Log</div>
+              <div className="space-y-2">
+                {[
+                  { id:'TXN-8821', date:'2026-03-31', internal:'$48.20',    external:'$51.40', merchant:'Acme Corp',  issue:'Fee rate variance — rounding difference',                                              status:'Investigate' },
+                  { id:'TXN-8934', date:'2026-03-31', internal:'Not found', external:'$32.50', merchant:'Beta Ltd',   issue:'Transaction present in Stripe report but missing from internal DB — timing lag suspected', status:'Investigate' },
+                  { id:'TXN-9102', date:'2026-04-01', internal:'$24.10',    external:'$24.10', merchant:'Gamma Inc',  issue:'Period mismatch — transaction crossed month-end boundary',                               status:'Cleared' },
+                  { id:'TXN-9205', date:'2026-04-01', internal:'$35.20',    external:'$32.80', merchant:'Delta Co',   issue:'Currency rounding on FX conversion — confirmed with Stripe support',                     status:'Cleared' },
+                ].map(t => (
+                  <div key={t.id} className={`rounded-xl border p-3 ${t.status==='Cleared' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-slate-700">{t.id}</span>
+                          <span className="text-xs text-slate-500">{t.date}</span>
+                          <span className="text-xs font-medium text-slate-700">{t.merchant}</span>
+                        </div>
+                        <div className="text-xs text-slate-600 mb-1">{t.issue}</div>
+                        <div className="flex gap-4 text-xs">
+                          <span><span className="text-slate-400">Internal: </span><span className="font-medium">{t.internal}</span></span>
+                          <span><span className="text-slate-400">Stripe: </span><span className="font-medium">{t.external}</span></span>
+                        </div>
+                      </div>
+                      <Pill cls={t.status==='Cleared' ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}>{t.status}</Pill>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="font-semibold text-sm text-slate-800 mb-3">Reconciliation Actions</div>
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
+              {states['INV-011'].status === 'Received' && (
+                <button onClick={() => doStartRecon('INV-011')} className="flex items-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium rounded-lg transition"><I n="refresh"/> Start Reconciliation</button>
+              )}
+              {states['INV-011'].status === 'Recon In Progress' && (
+                <button onClick={() => doClearRecon('INV-011')} className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium rounded-lg transition"><I n="check"/> Clear Exceptions and Post to QBO</button>
+              )}
+              {states['INV-011'].status === 'Reconciled & Posted' && (
+                <div className="flex items-center gap-2 text-teal-700 font-semibold text-sm"><I n="check"/> Reconciled and posted to QBO — GL 6600 (Payment Processing Fees)</div>
+              )}
+              <StatusPill status={states['INV-011'].status}/>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 leading-relaxed">
+              <strong>Control note:</strong> Payment partner invoices bypass the standard Team Lead approval process. Shashwat Yadav (Finance Manager) posts the invoice directly to QBO after reconciliation is complete and all exceptions are cleared or formally documented. Any unresolved exceptions after 2 business days must be escalated to Dave McKenzie (Head of Finance).
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ PAYMENT RUN TAB */}
+      {tab === 'payment' && (
+        <div className="max-w-3xl mx-auto space-y-5">
+          <div className="bg-emerald-900 rounded-2xl p-5 text-white">
+            <div className="text-xs font-medium text-emerald-300 uppercase tracking-wide mb-1">Phase 7 — Weekly Payment Execution</div>
+            <div className="text-lg font-bold mb-1">Tuesday Payment Run — April 2026</div>
+            <div className="text-sm text-emerald-200 mb-3">Shashwat Yadav prepares the sheet · Dave McKenzie reviews and releases</div>
+            <div className="text-xs text-emerald-300">The weekly Tuesday payment run ensures vendors receive payment before the weekend. Finance Manager prepares the payment sheet based on due dates and maximises payment terms to protect cash flow. Head of Finance releases payments through the banking portal.</div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-800">Payment Sheet — Week of April 1, 2026</h3>
+                <div className="text-xs text-slate-500 mt-0.5">All invoices due on or before Monday, April 7, 2026 · Sorted by due date ascending</div>
+              </div>
+              <button onClick={exportPaySheet} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition"><I n="dl"/> Download Sheet</button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>{['INV #','Vendor','Amount','Due Date','Terms','Method','Status'].map(h => <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {INVOICES.map((i,idx) => {
+                    const eligible = ['Approved','In QBO','Scheduled','Paid','Reconciled & Posted'].includes(states[i.id].status);
+                    return (
+                      <tr key={i.id} className={`${eligible?'':'opacity-35'} ${idx%2===0?'bg-white':'bg-slate-50/50'}`}>
+                        <td className="px-4 py-2.5 font-mono text-xs font-bold text-slate-700">{i.id}</td>
+                        <td className="px-4 py-2.5 font-medium text-slate-900">{i.vendor}</td>
+                        <td className="px-4 py-2.5 font-bold text-slate-900 whitespace-nowrap">{fmt(i.amount)}</td>
+                        <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">{i.due}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{i.terms}</td>
+                        <td className="px-4 py-2.5 text-slate-600">EFT</td>
+                        <td className="px-4 py-2.5"><StatusPill status={states[i.id].status}/></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot className="bg-slate-100 border-t border-slate-200">
+                  <tr>
+                    <td colSpan={2} className="px-4 py-2.5 font-bold text-slate-800 text-sm">Total eligible for payment</td>
+                    <td className="px-4 py-2.5 font-bold text-slate-900 whitespace-nowrap">{fmt(INVOICES.filter(i => ['Approved','In QBO','Scheduled','Paid','Reconciled & Posted'].includes(states[i.id].status)).reduce((a,i)=>a+i.amount,0))}</td>
+                    <td colSpan={4}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-800 mb-4">Head of Finance — Review and Release</h3>
+            <div className="flex items-center gap-4 mb-4">
+              <Av p={TEAM.HOF} lg/>
+              <div>
+                <div className="font-bold text-slate-900">{TEAM.HOF.name}</div>
+                <div className="text-sm text-slate-500">{TEAM.HOF.role}</div>
+              </div>
+              {payRun.released ? <Pill cls="bg-emerald-100 text-emerald-800">✓ Payments Released</Pill>
+                : payRun.reviewing ? <Pill cls="bg-amber-100 text-amber-800">Reviewing...</Pill>
+                : <Pill cls="bg-slate-100 text-slate-600">Awaiting Review</Pill>}
+            </div>
+            <div className="p-3 bg-blue-50 rounded-xl text-xs text-blue-800 mb-4 leading-relaxed">
+              Dave McKenzie reviews the payment sheet, validates all amounts against QuickBooks Online entries, and releases payments through the banking portal. Payment confirmation numbers are shared with Shashwat Yadav for Invoice Log reconciliation.
+            </div>
+            {!payRun.released && (
+              <button onClick={() => {
+                setPayRun({ reviewing:true, released:false });
+                setTimeout(() => {
+                  setPayRun({ reviewing:false, released:true });
+                  INVOICES.forEach(i => { if (states[i.id].status === 'Scheduled') doPaid(i.id); });
+                  toast(`💸 ${TEAM.HOF.name} has released all scheduled payments`);
+                }, 1800);
+              }} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition">
+                <I n="dollar"/> {payRun.reviewing ? 'Processing...' : `${TEAM.HOF.name} — Release Payments`}
+              </button>
+            )}
+            {payRun.released && (
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-emerald-700">✓ All scheduled payments have been released</div>
+                <div className="text-xs text-slate-500">Confirmation numbers logged below. Finance Manager to reconcile against bank records and update the Invoice Log.</div>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {['CONF-20260401-001','CONF-20260401-002','CONF-20260401-003'].map((c,i) => (
+                    <div key={i} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs text-slate-700 text-center">{c}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ INTERNAL CONTROLS TAB */}
+      {tab === 'controls' && (
+        <div className="space-y-5">
+          <div className="bg-slate-800 rounded-2xl p-5 text-white">
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Internal Controls Framework</div>
+            <div className="text-lg font-bold mb-1">AP Automation — Control Environment</div>
+            <div className="text-sm text-slate-300">Four categories of controls are embedded across all seven process phases. Every invoice passes through both preventative and detective controls before payment can be released.</div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label:'Preventative', count:5, bg:'bg-blue-700',   light:'bg-blue-50 border-blue-200 text-blue-900' },
+              { label:'Detective',    count:4, bg:'bg-violet-700', light:'bg-violet-50 border-violet-200 text-violet-900' },
+              { label:'Approval',     count:4, bg:'bg-amber-600',  light:'bg-amber-50 border-amber-200 text-amber-900' },
+              { label:'Completeness', count:4, bg:'bg-teal-700',   light:'bg-teal-50 border-teal-200 text-teal-900' },
+            ].map(c => {
+              const fired = INVOICES.filter(i => states[i.id].trail.length > 0).length;
+              return (
+                <div key={c.label} className={`rounded-2xl border p-4 ${c.light}`}>
+                  <div className={`w-8 h-8 rounded-lg ${c.bg} text-white text-xs font-bold flex items-center justify-center mb-3`}>{c.count}</div>
+                  <div className="font-bold text-sm">{c.label}</div>
+                  <div className="text-xs mt-1 opacity-70">{c.count} controls defined</div>
+                  <div className="text-xs font-semibold mt-1">{fired} invoices active this session</div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="grid grid-cols-2 gap-5">
+            {controls.map(cat => (
+              <div key={cat.type} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+                <div className={`${cat.bg} px-5 py-3`}><span className="text-white font-bold text-sm">{cat.type}</span></div>
+                <div className="p-4 space-y-3">
+                  {cat.items.map(item => (
+                    <div key={item.label} className="flex items-start gap-3">
+                      <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5 text-slate-500"><I n="lock"/></div>
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">{item.label}</div>
+                        <div className="text-xs text-slate-500 leading-relaxed">{item.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-800 mb-4">Live Control Events — This Session</h3>
+            {INVOICES.flatMap(i => states[i.id].trail.map(e => ({ ...e, inv:i }))).length === 0 && (
+              <div className="text-sm text-slate-400 text-center py-6">No control events yet. Process invoices in the Workflow tab to see controls firing in real time here.</div>
+            )}
+            <div className="space-y-1.5">
+              {INVOICES.flatMap(i => states[i.id].trail.map(e => ({ ...e, inv:i }))).map((e, idx) => {
+                const isControl = ['Flagged','Rejected','Returned','First Approval','Reconcil','GL Assigned'].some(kw => e.action.includes(kw));
+                return (
+                  <div key={idx} className={`flex items-start gap-3 px-3 py-2 rounded-xl text-xs ${isControl ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50'}`}>
+                    <span className="font-mono text-slate-400 w-20 flex-shrink-0">{e.t}</span>
+                    <span className="font-bold text-slate-600 w-20 flex-shrink-0">{e.inv.id}</span>
+                    {isControl && <span className="text-amber-600 flex-shrink-0"><I n="shield"/></span>}
+                    <span className="font-semibold text-slate-800">{e.action}</span>
+                    <span className="text-slate-500">— {e.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ FM DASHBOARD TAB */}
+      {tab === 'dashboard' && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label:'Total Pipeline',    val:fmt(stats.total),    sub:'8 invoices',                   color:'text-slate-900', bg:'bg-white' },
+              { label:'Approved Value',    val:fmt(stats.approved), sub:'Approved or beyond',            color:'text-green-700', bg:'bg-green-50 border-green-200' },
+              { label:'Paid This Cycle',   val:fmt(stats.paid),     sub:'Released and confirmed',        color:'text-emerald-700',bg:'bg-emerald-50 border-emerald-200' },
+              { label:'Pending Approval',  val:stats.pending,       sub:'awaiting Team Lead response',   color:'text-violet-700', bg:'bg-violet-50 border-violet-200' },
+            ].map(c => (
+              <div key={c.label} className={`rounded-2xl border p-5 ${c.bg}`}>
+                <div className="text-xs text-slate-500 font-medium mb-2">{c.label}</div>
+                <div className={`text-2xl font-bold ${c.color}`}>{c.val}</div>
+                <div className="text-xs text-slate-400 mt-1">{c.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-5">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <h3 className="font-semibold text-slate-800 mb-4">Status Breakdown</h3>
+              <div className="space-y-2">
+                {Object.entries(INVOICES.reduce((acc,i) => { acc[states[i.id].status] = (acc[states[i.id].status]||0)+1; return acc; }, {})).map(([status, count]) => {
+                  const m = SM[status] || SM['Received'];
+                  return (
+                    <div key={status} className="flex items-center gap-3">
+                      <div className="w-24 text-xs text-slate-500 truncate">{m.label}</div>
+                      <div className="flex-1 bg-slate-100 rounded-full h-2">
+                        <div className={`h-2 rounded-full ${m.dot}`} style={{ width:`${(count/INVOICES.length)*100}%` }}></div>
+                      </div>
+                      <div className="w-4 text-xs font-bold text-slate-700 text-right">{count}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+              <h3 className="font-semibold text-slate-800 mb-4">By Entity</h3>
+              {['Loop Financial Inc.','Loop Payments Inc.'].map(entity => {
+                const ents = INVOICES.filter(i => i.entity === entity);
+                return (
+                  <div key={entity} className="mb-4">
+                    <div className="text-xs font-semibold text-slate-500 mb-1">{entity}</div>
+                    <div className="text-lg font-bold text-indigo-700 mb-2">{fmt(ents.reduce((a,i)=>a+i.amount,0))}</div>
+                    {ents.map(i => (
+                      <div key={i.id} className="flex items-center justify-between text-xs py-1 border-b border-slate-100">
+                        <span className="text-slate-600">{i.id} — {i.vendor}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{fmt(i.amount)}</span>
+                          <StatusPill status={states[i.id].status}/>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <h3 className="font-semibold text-slate-800 mb-4">Process Improvements — Tracker</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+                <div className="text-xs font-bold text-green-800 uppercase tracking-wide mb-2">Annual Billing Candidates</div>
+                {INVOICES.filter(i => ['Datadog','Slack','Figma'].includes(i.vendor)).map(i => (
+                  <div key={i.id} className="flex items-center justify-between text-xs py-1 border-b border-green-100">
+                    <span className="font-medium text-green-900">{i.vendor}</span>
+                    <span className="text-green-700">{fmt(i.amount)}/mo → est. {fmt(i.amount*10)}/yr (10% saving)</span>
+                  </div>
+                ))}
+                <div className="text-xs text-green-700 mt-2 font-medium">Switching to annual billing eliminates 11 monthly approval cycles per vendor per year.</div>
+              </div>
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <div className="text-xs font-bold text-indigo-800 uppercase tracking-wide mb-2">PO-Backed Invoices (TL Approval Waived)</div>
+                {INVOICES.filter(i => i.po).map(i => (
+                  <div key={i.id} className="flex items-center justify-between text-xs py-1 border-b border-indigo-100">
+                    <span className="font-medium text-indigo-900">{i.vendor}</span>
+                    <span className="text-indigo-700">{i.po}</span>
+                  </div>
+                ))}
+                <div className="text-xs text-indigo-700 mt-2 font-medium">Standing POs replace per-invoice Team Lead approval with a single annual sign-off.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════ AUDIT LOGS TAB */}
+      {tab === 'logs' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-slate-900">Full Audit Log</h2>
+            <div className="flex gap-2">
+              <button onClick={exportLog} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition"><I n="dl"/> Invoice Log CSV</button>
+              <button onClick={exportQBO} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition"><I n="dl"/> QBO Export CSV</button>
+              <button onClick={exportPaySheet} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition"><I n="dl"/> Payment Sheet CSV</button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 text-sm font-semibold text-slate-700">Invoice Log — All Invoices</div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>{['INV #','Vendor','Entity','Amount','GL','Dept','Memo','Due','Status','Tags'].map(h=><th key={h} className="px-3 py-2.5 text-left font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>)}</tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {INVOICES.map((i,idx) => {
+                    const s = states[i.id]; const gl = GL_CODES.find(g=>g.code===s.gl);
+                    return (
+                      <tr key={i.id} className={`cursor-pointer hover:bg-indigo-50 transition ${idx%2===0?'bg-white':'bg-slate-50/50'}`} onClick={()=>{setSelId(i.id);setTab('workflow');}}>
+                        <td className="px-3 py-2.5 font-mono font-bold text-slate-700">{i.id}</td>
+                        <td className="px-3 py-2.5 font-semibold text-slate-900">{i.vendor}</td>
+                        <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{i.entity.replace('Loop ','')}</td>
+                        <td className="px-3 py-2.5 font-bold text-slate-900 whitespace-nowrap">{fmt(i.amount)}</td>
+                        <td className="px-3 py-2.5 font-mono text-slate-600">{s.gl||<span className="text-amber-500">—</span>}</td>
+                        <td className="px-3 py-2.5 text-slate-600">{i.dept}</td>
+                        <td className="px-3 py-2.5 text-slate-500 max-w-xs truncate">{i.memo}</td>
+                        <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{i.due}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap"><StatusPill status={s.status}/></td>
+                        <td className="px-3 py-2.5"><div className="flex gap-1 flex-wrap">{i.tags.map(t=><span key={t} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-xs">{t}</span>)}</div></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {INVOICES.filter(i => states[i.id].trail.length > 0).map(i => (
+            <div key={i.id} className="bg-white rounded-2xl border border-slate-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold text-slate-700">{i.id}</span>
+                  <span className="font-semibold text-slate-900">{i.vendor}</span>
+                  <span className="font-bold text-slate-900">{fmt(i.amount)}</span>
+                </div>
+                <StatusPill status={states[i.id].status}/>
+              </div>
+              <div className="space-y-1.5">
+                {states[i.id].trail.map((e,idx) => (
+                  <div key={idx} className="flex items-start gap-3 text-xs">
+                    <span className="font-mono text-slate-400 w-20 flex-shrink-0">{e.t}</span>
+                    <span className="w-2 h-2 rounded-full bg-indigo-300 mt-1 flex-shrink-0"></span>
+                    <span className="font-semibold text-slate-800">{e.action}</span>
+                    <span className="text-slate-500">— {e.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {INVOICES.every(i => states[i.id].trail.length === 0) && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-400 text-sm">No audit events yet. Process invoices in the Workflow tab to generate an audit trail.</div>
+          )}
+        </div>
+      )}
+
+      </main>
+
+      <footer className="border-t border-slate-200 bg-white mt-10 px-5 py-4">
+        <div className="max-w-screen-xl mx-auto flex items-center justify-between text-xs text-slate-400">
+          <span>Loop Financial Inc. · AP Automation Demo v2.1 · Finance Manager: Shashwat Yadav · Head of Finance: Dave McKenzie · HR: Mandy Ho</span>
+          <span>Confidential — Internal Use Only · April 2026</span>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
